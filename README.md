@@ -12,3 +12,5 @@ State and RDFs are saved to outDir once per minute.
 Quit with `^C` (state and RDFs will be saved).
 
 App loads its state and RDFs when run again.
+
+HTTP requests are cached in Redis. 
