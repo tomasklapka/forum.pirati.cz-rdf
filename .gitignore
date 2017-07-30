@@ -1,0 +1,24 @@
+config.json
+out
+
+package-lock.json
+
+# Dependency directory
+node_modules
+typings
+dist
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Compiler generated
+source/**/*.js
+src/**/*.js
+model/**/*.js
+test/**/*.js
+
+# Editor config
+.vscode
