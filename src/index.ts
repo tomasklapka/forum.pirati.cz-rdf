@@ -34,8 +34,8 @@ process.on('SIGINT', quit);
 ForumPiratiCzPageScrapper
 .login(forumUrl+'ucp.php?mode=login', username, password)
 .then((response) => {
-    setInterval(scrapTick, 1000);
-    setInterval(saveData, 60000);
+    setInterval(scrapTick, 500);
+    setInterval(saveData, 30000);
 })
 .catch((err) => {
     console.log(err);
@@ -47,15 +47,18 @@ function scrapTick(): void {
         (new ForumPiratiCzPageScrapper(url, requestCache)).scrap().then((data) => {
             if (data.links) {
                 for (const link of data.links) {
-                    switch (link.type) { // crawl forum links
-                        case PageType.Forum:
-                        case PageType.Thread:
-                        case PageType.Group:
-                        case PageType.User:
-                            if (finished.indexOf(link.url) == -1 &&
-                                queue.indexOf(link.url) == -1) {
-                                queue.push(link.url);
-                            }
+                    if (link.url.indexOf(forumUrl) == 0) {
+                        switch (link.type) { // crawl forum links
+                            case PageType.Forum:
+                            case PageType.Thread:
+                            case PageType.Group:
+                            case PageType.User:
+                                if (finished.indexOf(link.url) == -1 &&
+                                    queue.indexOf(link.url) == -1) {
+                                    debug('queueing: "%s"', link.url);
+                                    queue.push(link.url);
+                                }
+                        }
                     }
                 }
             }
