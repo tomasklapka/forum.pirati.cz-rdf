@@ -13,4 +13,11 @@ Quit with `^C` (state and RDFs will be saved).
 
 App loads its state and RDFs when run again.
 
-HTTP requests are cached in Redis. 
+HTTP requests can be cached in Redis (usefulf for debugging with repeated requests for the same url).
+
+TODO:
+    - add (Forum, sioc:parent_of, Thread/Forum) triple into Forum graph if thread is its child
+    - homepage conversion to sym requires validation
+    - better error handling (try catch for cheerio.load and $rdf.parse) and handle all rejects.
+    - do not keep the graph data in memory
+    - address data requires parsing and validation
