@@ -1,53 +1,41 @@
 import { fnDebug, getDebug } from './debug';
-let debug = getDebug('rdf-add');
+const debug = getDebug('rdf-export');
 
-import { Namespace } from 'rdflib';
 import * as $rdf from 'rdflib';
-
-import * as fs from 'fs';
-import * as mkdirp from 'mkdirp';
-import * as URL from 'url';
-import { join, basename } from 'path';
 import { isUri } from 'valid-url';
 
+import { FileSystemGraphStore } from './file-system-graph-store';
 import { PhpbbPageType as PageType } from './phpbb-page-scrapper';
 
-const RDF   = Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
-const RDFS  = Namespace("http://www.w3.org/2000/01/rdf-schema#");
-const FOAF  = Namespace("http://xmlns.com/foaf/0.1/");
-const XSD   = Namespace("http://www.w3.org/2001/XMLSchema#");
-const SIOC  = Namespace("http://rdfs.org/sioc/ns#");
-const DC    = Namespace("http://purl.org/dc/elements/1.1/");
-const DCT   = Namespace("http://purl.org/dc/terms/");
-const VCARD = Namespace("http://www.w3.org/2006/vcard/ns#");
-const AS    = Namespace("https://www.w3.org/ns/activitystreams#");
+const RDF   = $rdf.Namespace("http://www.w3.org/1999/02/22-rdf-syntax-ns#");
+const RDFS  = $rdf.Namespace("http://www.w3.org/2000/01/rdf-schema#");
+const FOAF  = $rdf.Namespace("http://xmlns.com/foaf/0.1/");
+const XSD   = $rdf.Namespace("http://www.w3.org/2001/XMLSchema#");
+const SIOC  = $rdf.Namespace("http://rdfs.org/sioc/ns#");
+const DC    = $rdf.Namespace("http://purl.org/dc/elements/1.1/");
+const DCT   = $rdf.Namespace("http://purl.org/dc/terms/");
+const VCARD = $rdf.Namespace("http://www.w3.org/2006/vcard/ns#");
+const AS    = $rdf.Namespace("https://www.w3.org/ns/activitystreams#");
 
 export class RdfExport {
 
-    outDir = './out/';
-    baseDir = null;
-    usersDir = null;
-    groupsDir = null;
-    forumsDir = null;
-    threadsDir = null;
+    readonly DEFAULT_DIR = './out/';
 
-    base = null;
-    mirrorBase = null;
+    baseSym = null;
 
-    rootSym = null;
-    root = null;
-    users = {};
-    groups = {};
-    threads = {};
-    forums = {};
-
-    constructor(private baseUrl) {
-        this.root = $rdf.graph();
-        this.rootSym = $rdf.sym(baseUrl);
-        this.root.add(this.rootSym, RDF('type'), SIOC('Site'));
+    constructor(private baseUrl, private graphStore = null) {
+        fnDebug('RdfExport.constructor(%s, %s)', baseUrl, (graphStore)?'injectedGraphStore':'null');
+        if (!this.graphStore) {
+            this.graphStore = new FileSystemGraphStore(this.baseUrl, this.DEFAULT_DIR)
+        }
+        this.baseSym = $rdf.sym(this.baseUrl);
+        const base = this.graphStore.base.get(this.baseUrl);
+        base.add(this.baseSym, RDF('type'), SIOC('Site'));
+        this.graphStore.base.put(this.baseUrl, base);
     }
 
     add(data): RdfExport {
+        fnDebug('RdfExport.add(%s)', data);
         switch (data.type) {
             case PageType.Root:
                 this.addRoot(data); break;
@@ -63,139 +51,16 @@ export class RdfExport {
         return this;
     }
 
-    setOutDir(outDir): RdfExport {
-        fnDebug('setOutDir('+outDir+')');
-        this.outDir = outDir;
-        this.base = URL.parse(this.baseUrl);
-        for (let dir of [
-            this.baseDir = this.outDir+this.base.hostname+'/',
-            this.usersDir = this.baseDir,//+'users/',
-            this.groupsDir = this.baseDir,//+'groups/',
-            this.forumsDir = this.baseDir,//+'forums/',
-            this.threadsDir = this.baseDir,//+'threads/'
-        ]) {
-            try { fs.mkdirSync(dir); } catch (e) {}
-        }
-        this.mirrorBase = './'+this.base.hostname+'/';
-        return this;
-    }
-
-    private ls(dir: string): any {
-        let files = [];
-        let directories = [];
-        let list = fs.readdirSync(dir);
-        list.forEach((element) => {
-            const fullPath = join(dir, element);
-            if (fs.lstatSync(fullPath).isDirectory()) {
-                directories.push(fullPath);
-            } else {
-                if (/\.ttl$/.exec(fullPath))
-                    files.push(fullPath);
-            }
-        })
-        return {
-            files: files,
-            directories: directories
-        }
-    }
-
-    load(loadDir?: string): void {
-        fnDebug('load('+loadDir+')');
-        if (!fs.existsSync(loadDir)) return;
-        if (!loadDir) loadDir = this.outDir;
-        const list = this.ls(loadDir);
-        for (const file of list.files) {
-            const graph = $rdf.graph();
-            try {
-                $rdf.parse(this.fileIn('./'+file), graph, 'http://localhost/', 'text/turtle');
-            } catch (err) {
-                console.log(err);
-            }
-            const filename = basename(file);
-            const type = /-([ugft])\d+.ttl$/.exec(filename);
-            if (type && type[1]) {
-                const url = graph.any().value;
-                switch (type[1]) {
-                    case 'u':
-                        this.users[url] = graph; break;
-                    case 'g':
-                        this.groups[url] = graph; break;
-                    case 't':
-                        this.threads[url] = graph; break;
-                    case 'f':
-                        this.forums[url] = graph; break;
-                }
-            } else {
-                if (filename == 'site.ttl') {
-                    this.root = graph;
-                }
-            }
-        }
-        for (let dir of list.directories) {
-            this.load(dir);
-        }
-    }
-
-    stats() {
-        let stats = '';
-        stats += '\tusers:\t\t' +Object.keys(this.users).length   +'\n';
-        stats += '\tgroups:\t\t'+Object.keys(this.groups).length  +'\n';
-        stats += '\tforums:\t\t'+Object.keys(this.forums).length  +'\n';
-        stats += '\tthreads:\t' +Object.keys(this.threads).length;
-        return stats;
-    }
-
-    save(outDir?: string) {
-        fnDebug('save('+outDir+')');
-        if (outDir) { this.setOutDir(outDir); }
-        this.saveRoot();
-        for (let user in this.users) {
-            this.saveUser(user);
-        }
-        for (let group in this.groups) {
-            this.saveGroup(group);
-        }
-        for (let forum in this.forums) {
-            this.saveForum(forum);
-        }
-        for (let thread in this.threads) {
-            this.saveThread(thread);
-        }
-    }
-
-    saveRoot(): void {
-        this.serializeToFile(this.root, this.baseDir+'site.ttl');
-    }
-
-    saveUser(userUrl: string): void {
-        let filename = userUrl.replace(this.baseUrl, '').replace(/\/$/, '.ttl');
-        this.serializeToFile(this.users[userUrl], this.usersDir+filename);
-    }
-
-    saveGroup(groupUrl: string): void {
-        let filename = groupUrl.replace(this.baseUrl, '').replace('.html','.ttl');
-        this.serializeToFile(this.groups[groupUrl], this.groupsDir+filename);
-    }
-
-    saveForum(forumUrl: string): void {
-        let filename = forumUrl.replace(this.baseUrl, '').replace(/\/$/, '.ttl');
-        this.serializeToFile(this.forums[forumUrl], this.forumsDir+filename);
-    }
-
-    saveThread(threadUrl: string): void {
-        let filename = threadUrl.replace(this.baseUrl, '').replace('.html', '.ttl');
-        this.serializeToFile(this.threads[threadUrl], this.threadsDir+filename);
-    }
-
     private addRoot(data): void {
-        this.root.add(this.rootSym, DC('title'), $rdf.lit(data.title, 'cs'));
+        const base = this.graphStore.base.get(this.baseUrl);
+        base.add(this.baseSym, DC('title'), $rdf.lit(data.title, 'cs'));
+        this.graphStore.base.put(this.baseUrl, base);
     }
     
     private addUser(data): void {
         const foafSym = $rdf.sym(data.url+'#card')
         const userSym = $rdf.sym(data.url);
-        let user = this.users[data.url];
-        if (!user) user = $rdf.graph();
+        const user = this.graphStore.users.get(data.url);
 
         user.add(userSym, RDF('type'), SIOC('UserAccount'));
         user.add(userSym, FOAF('accountName'), $rdf.lit(data.username));
@@ -209,7 +74,7 @@ export class RdfExport {
         user.add(foafSym, FOAF('account'), userSym);
         user.add(foafSym, FOAF('nick'), $rdf.lit(data.username));
         if (data.avatarSrc) {
-            let avatarSym = $rdf.sym(this.baseUrl+data.avatarSrc);
+            const avatarSym = $rdf.sym(this.baseUrl+data.avatarSrc);
             user.add(foafSym, FOAF('img'), avatarSym);
             user.add(userSym, SIOC('avatar'), avatarSym);
         }
@@ -226,7 +91,7 @@ export class RdfExport {
 
         if (data.address) {
             user.add(foafSym, RDF('type'), VCARD('Individual'));
-            let addressSym = $rdf.sym(data.url+'#home');
+            const addressSym = $rdf.sym(data.url+'#home');
             user.add(foafSym, VCARD('hasAddress'), addressSym);
             // TODO: address needs to be parsed and validated first
             user.add(addressSym, VCARD('street-address'), $rdf.lit(data.address,));
@@ -238,7 +103,7 @@ export class RdfExport {
             }
         }
 
-        this.users[data.url] = user;
+        this.graphStore.users.put(data.url, user);
     }
 
     private addGroup(data): void {
@@ -247,8 +112,7 @@ export class RdfExport {
             url = data.firstPageUrl;
         }
         const groupSym = $rdf.sym(url);
-        let group = this.groups[url];
-        if (!group) group = $rdf.graph();
+        const group = this.graphStore.groups.get(url);
 
         group.add(groupSym, RDF('type'), SIOC('Usergroup'));
         group.add(groupSym, DC('title'), $rdf.lit(data.title, 'cs'));
@@ -259,10 +123,10 @@ export class RdfExport {
             group.add(groupSym, SIOC('id'), phpbbid);
         }
 
-        for (let userUrl of data.users) {
+        for (const userUrl of data.users) {
             group.add(groupSym, SIOC('has_member'), $rdf.sym(userUrl));
         }
-        this.groups[url] = group;
+        this.graphStore.groups.put(url, group);
     }
 
     private addForum(data): void {
@@ -271,8 +135,8 @@ export class RdfExport {
             url = data.firstPageUrl;
         }
         const forumSym = $rdf.sym(url);
-        let forum = this.forums[url];
-        if (!forum) forum = $rdf.graph();
+
+        const forum = this.graphStore.forums.get(url);
         forum.add(forumSym, RDF('type'), SIOC('Forum'));
         forum.add(forumSym, DC('title'), $rdf.lit(data.title, 'cs'));
         forum.add(forumSym, SIOC('has_host'), $rdf.sym(this.baseUrl));
@@ -285,28 +149,30 @@ export class RdfExport {
 
         if (data.parentForumUrl) {
             if (data.parentForumUrl == this.baseUrl) {
-                this.root.add(this.rootSym, SIOC('host_of'), $rdf.sym(url));
+                const base = this.graphStore.base.get(this.baseUrl);
+                base.add(this.baseSym, SIOC('host_of'), $rdf.sym(url));
+                this.graphStore.base.put(this.baseUrl, base);
             } else {
-                let parentForum = this.forums[data.parentForumUrl];
-                if (!parentForum) parentForum = $rdf.graph();
-                let parentForumSym = $rdf.sym(data.parentForumUrl);
+                const parentForum = this.graphStore.forums.get(data.parentForumUrl);
+                const parentForumSym = $rdf.sym(data.parentForumUrl);
                 parentForum.add(parentForumSym, SIOC('parent_of'), forumSym);
-                this.forums[data.parentForumUrl] = parentForum;
+                this.graphStore.forums.put(data.parentForumUrl, parentForum);
                 forum.add(forumSym, SIOC('has_parent'), parentForumSym);
             }
         }
 
-        this.forums[url] = forum;
+        this.graphStore.forums.put(url, forum);
     }
 
     private addThread(data): void {
+
         let url = data.url;
         if (data.page && data.page > 0) {
             url = data.firstPageUrl;
         }
+
         const threadSym = $rdf.sym(url);
-        let thread = this.threads[url];
-        if (!thread) thread = $rdf.graph();
+        const thread = this.graphStore.threads.get(url);
 
         thread.add(threadSym, RDF('type'), SIOC('Thread'));
         thread.add(threadSym, DC('title'), $rdf.lit(data.title, 'cs'));
@@ -320,20 +186,21 @@ export class RdfExport {
 
         if (data.parentForumUrl) {
             if (data.parentForumUrl == this.baseUrl) {
-                this.root.add(this.rootSym, SIOC('host_of'), threadSym);
-                this.root.add(this.rootSym, SIOC('parent_of'), threadSym);
+                const base = this.graphStore.base.get(this.baseUrl);
+                base.add(this.baseSym, SIOC('host_of'), threadSym);
+                base.add(this.baseSym, SIOC('parent_of'), threadSym);
+                this.graphStore.base.put(this.baseUrl, base);
             } else {
-                let parentForum = this.forums[data.parentForumUrl];
-                if (!parentForum) parentForum = $rdf.graph();
-                let parentForumSym = $rdf.sym(data.parentForumUrl);
+                const parentForum = this.graphStore.forums.get(data.parentForumUrl);
+                const parentForumSym = $rdf.sym(data.parentForumUrl);
                 parentForum.add(parentForumSym, SIOC('parent_of'), threadSym);
-                this.forums[data.parentForumUrl] = parentForum;
+                this.graphStore.forums.put(data.parentForumUrl, parentForum);
                 thread.add(threadSym, SIOC('has_parent'), parentForumSym);
             }
         }
 
         for (let post of data.posts) {
-            let postSym = $rdf.sym(url+'#p'+post.phpbbid);
+            const postSym = $rdf.sym(url+'#p'+post.phpbbid);
             thread.add(postSym, RDF('type'), SIOC('Post'));
             thread.add(postSym, SIOC('id'), $rdf.lit(post.phpbbid, '', XSD('Integer')));
             thread.add(postSym, DC('title'), $rdf.lit(post.title, 'cs'));
@@ -342,42 +209,12 @@ export class RdfExport {
             thread.add(postSym, DCT('created'), $rdf.Literal.fromDate(new Date(post.created)));
             thread.add(postSym, SIOC('content'), $rdf.lit(post.content, 'cs'));
 
-            for (let userSrc of post.likes) {
-                let user = this.users[userSrc];
-                if (!user) user = $rdf.graph();
+            for (const userSrc of post.likes) {
+                const user = this.graphStore.users.get(userSrc);
                 user.add($rdf.sym(userSrc), AS('Like'), postSym);
-                this.users[userSrc] = user;
+                this.graphStore.users.put(userSrc, user);
             }
-
         }
-
-        this.threads[url] = thread;
+        this.graphStore.threads.put(url, thread);
     }
-
-    private fileIn(file: string): string {
-        return fs.readFileSync(file).toString();
-    }
-
-    private fileOut(where, what) {
-        let dir = where.substring(0, where.lastIndexOf('/')+1);
-        if (!fs.existsSync(dir)) {
-            mkdirp.sync(dir);
-        }
-        fs.writeFileSync(where, what);
-    }
-
-    private serialize(graph, cb) {
-        $rdf.serialize(null, graph, this.mirrorBase, 'text/turtle', cb);
-    }
-
-    private serializeToFile(graph, filename) {
-        this.serialize(graph, (err, data) => {
-            if (err) {
-                console.log(err);
-            }
-            this.fileOut(filename, data);
-        });
-    }
-
-
 }

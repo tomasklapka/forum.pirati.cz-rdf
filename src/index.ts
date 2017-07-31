@@ -7,6 +7,7 @@ import * as fs from 'fs';
 
 import { PhpbbPageType as PageType } from './phpbb-page-scrapper';
 import { ForumPiratiCzPageScrapper } from './forum-pirati-cz-page-scrapper';
+import { FileSystemGraphStore } from './file-system-graph-store';
 import { RdfExport } from './rdf-export';
 
 const configFile = './config.json';
@@ -23,9 +24,11 @@ let finished = [];
 
 loadConfig();
 
-const rdfExport = new RdfExport(forumUrl);
-rdfExport.setOutDir(outDir);
+const graphStore = new FileSystemGraphStore(forumUrl, outDir);
+const rdfExport = new RdfExport(forumUrl, graphStore);
+
 loadData();
+
 process.on('SIGINT', quit);
 
 ForumPiratiCzPageScrapper
@@ -34,14 +37,16 @@ ForumPiratiCzPageScrapper
     setInterval(scrapTick, 1000);
     setInterval(saveData, 60000);
 })
-.catch((err) => { debug(err); });
+.catch((err) => {
+    console.log(err);
+});
 
 function scrapTick(): void {
     if (queue.length > 0) {
-        let url = queue.shift();
+        const url = queue.shift();
         (new ForumPiratiCzPageScrapper(url, requestCache)).scrap().then((data) => {
             if (data.links) {
-                for (let link of data.links) {
+                for (const link of data.links) {
                     switch (link.type) { // crawl forum links
                         case PageType.Forum:
                         case PageType.Thread:
@@ -61,15 +66,11 @@ function scrapTick(): void {
 }
 
 function stats(): void {
-    console.log((new Date()).toISOString());
-    console.log(rdfExport.stats());
-    console.log('\tqueue:\t\t'+queue.length);
-    console.log('\tfinished:\t'+finished.length);
+    console.log((new Date())+'\tqueue: '+queue.length+'\tfinished: '+finished.length);
 }
 
 function quit(): void {
     console.log('Exitting...');
-    rdfExport.save();
     ForumPiratiCzPageScrapper.quit();
     saveData();
     console.log('Finished ok');
@@ -77,11 +78,24 @@ function quit(): void {
 }
 
 function saveData(): void {
-    rdfExport.save();
     fs.writeFileSync(dataFile, JSON.stringify({
         queue: queue,
         finished: finished
     }, null, ' '));
+    stats();
+}
+
+function loadData(): void {
+    if (fs.existsSync(dataFile)) {
+        let data = JSON.parse(fs.readFileSync(dataFile).toString());
+        if (data) {
+            queue = data.queue;
+            finished = data.finished;
+        }
+    }
+    if (queue.length == 0) {
+        queue.push(forumUrl);
+    }
     stats();
 }
 
@@ -99,19 +113,4 @@ function loadConfig(): void {
             }
         }
     }
-}
-
-function loadData(): void {
-    rdfExport.load(outDir);
-    if (fs.existsSync(dataFile)) {
-        let data = JSON.parse(fs.readFileSync(dataFile).toString());
-        if (data) {
-            queue = data.queue;
-            finished = data.finished;
-        }
-    }
-    if (queue.length == 0) {
-        queue.push(forumUrl);
-    }
-    stats();
 }
