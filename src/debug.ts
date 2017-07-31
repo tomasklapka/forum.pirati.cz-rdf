@@ -4,5 +4,4 @@ import * as debug from 'debug';
 export function getDebug(aftercolon?: string) {
     return debug(PKGNAME+((aftercolon) ? ':'+aftercolon : ''));
 }
-
-export const fnDebug = getDebug('fn');
+export let fnDebug = getDebug('fn');

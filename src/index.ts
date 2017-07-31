@@ -1,6 +1,6 @@
 export const PKGNAME = 'forum.pirati.cz-rdf';
 import { getDebug } from './debug'
-let debug = getDebug('index');
+const debug = getDebug('index');
 
 import * as process from 'process';
 import * as fs from 'fs';

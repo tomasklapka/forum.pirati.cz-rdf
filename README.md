@@ -16,6 +16,5 @@ App loads its state and RDFs when run again.
 HTTP requests can be cached in Redis (usefulf for debugging with repeated requests for the same url).
 
 TODO:
-* better error handling (try catch for cheerio.load) and handle all rejects.
 * address data requires parsing and validation
 * find properties for user's: signature, rank, occupation, defaultGroup, interests, profession, totalPosts, likesGot, likesGave, showOnMap

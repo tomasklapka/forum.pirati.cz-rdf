@@ -1,7 +1,5 @@
-import { PhpbbPageScrapper, PhpbbPageType as PageType } from './phpbb-page-scrapper';
-
 import { fnDebug, getDebug } from './debug';
-let debug = getDebug('forum-pirati-cz-page-scrapper');
+const debug = getDebug('forum-pirati-cz-page-scrapper');
 
 import { remove as removeDiacritics } from 'diacritics';
 import * as cheerio from 'cheerio';
@@ -11,7 +9,9 @@ import * as URL from 'url';
 import * as requestExt from 'request-extensible';
 import * as RequestHttpCache from 'request-http-cache';
 
-let defaultRequest = origRequest.defaults({ jar : true });
+import { PhpbbPageScrapper, PhpbbPageType as PageType } from './phpbb-page-scrapper';
+
+const defaultRequest = origRequest.defaults({ jar : true });
 
 const rootUrl = new RegExp(/^https?:\/\/[^\/]+\/$/);
 const forumUrl = new RegExp(/^http.*\-f(\d+)\/$/);
@@ -82,7 +82,13 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
             scrappingRequest({ url: this.url }, (err, response, body): void => {
                 if (err) this.reject(err);
                 if (!body) this.reject('no content');
-                this.$ = cheerio.load(body);
+                try {
+                    this.$ = cheerio.load(body);
+                } catch (err) {
+                    console.log('Cheerio parsing body: #####\n%s\n#####', body);
+                    console.log('Cheerio parsing error: %s', err);
+                    this.reject(err);
+                }
                 this.scrapLinks();
                 this.scrapParent();
                 this.scrapPagination();
@@ -99,15 +105,14 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
                         this.scrapGroup(); break;
                 };
                 this.$ = null;
-                setTimeout(()=>{
-                    this.resolve(this);
-                }, 100);
+                setTimeout(() => { this.resolve(this); }, 100);
             });
         });
     }
 
     initCache(httpRequestCache?: RequestHttpCache): void {
         fnDebug('this.initCache('+(httpRequestCache)?'injected httpRequestCache':''+')');
+
         if (!httpRequestCache) {
             httpRequestCache = new RequestHttpCache({
                 backend: 'redis',
@@ -120,7 +125,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         }
         ForumPiratiCzPageScrapper.httpRequestCache = httpRequestCache;
 
-        let requestWithFakeResponseHeaders = (options, callback) => {
+        const requestWithFakeResponseHeaders = (options, callback) => {
             defaultRequest(options, (error, response, body) => {
                 if (!error && response && response.headers) {
                     response.headers.etag = (new Date(new Date().toJSON().slice(0,10)+' 00:00:00')).getTime();
@@ -138,9 +143,8 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         });
     }
 
-
     static login(loginUrl: string, username: string, password: string): Promise<any> {
-        fnDebug('ForumPiratiCzPageScrapper.login('+loginUrl+', '+username+', ***invisible***)');
+        fnDebug('ForumPiratiCzPageScrapper.login("%s", "%s", "%s")', loginUrl, username, '***invisible***');
         return new Promise((resolve, reject) => {
             if (!username || !password || !loginUrl) resolve(null);
             defaultRequest({
@@ -201,7 +205,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
     private scrapParent(): void {
         fnDebug('this.scrapParent()');
-        let linkPath = this.$('div#page-header').children('div.navbar').children('div.inner').children('ul.navlinks')
+        const linkPath = this.$('div#page-header').children('div.navbar').children('div.inner').children('ul.navlinks')
                         .children('li.icon-home').children('a');
         this.forumUrl = linkPath.last().attr('href');
         if (linkPath.length > 1) {
@@ -212,7 +216,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     private scrapForum(): void {
         fnDebug('this.scrapForum()');
         this.phpbbid = this.forumIdFromUrl(this.url);
-        let title = this.$('div#page-body').children("h2").text();
+        const title = this.$('div#page-body').children("h2").text();
         if (title) {
             this.title = title;
         }
@@ -224,8 +228,8 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         this.title = this.$('dl.details').first().children('dd').children('span').text();
         this.signature = this.$('.signature').html();
 
-        let userBody = this.$('form#viewprofile').children('div.panel')
-        let userBodyPanel1 = userBody.first().children('div.inner').children('dl');
+        const userBody = this.$('form#viewprofile').children('div.panel')
+        const userBodyPanel1 = userBody.first().children('div.inner').children('dl');
         this.avatarSrc = userBodyPanel1.first().children('dt').children('img').first().attr('src');
         this.rank = userBodyPanel1.first().children('dd').text();
         if (this.rank.length == 0) { this.rank = null; }
@@ -234,7 +238,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
             detailsBody = detailsBody.next();
         }
         detailsBody.children('dt').each((i, e) => {
-            let dd = this.$(e).next();
+            const dd = this.$(e).next();
             switch (this.$(e).text()) {
                 case 'Uživatelské jméno:':
                     this.username = dd.children('span').text();
@@ -266,9 +270,9 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
                     this.rank = dd.text(); break;
             }
         })
-        let userBodyPanel2 = userBody.first().next().children('div.inner');
+        const userBodyPanel2 = userBody.first().next().children('div.inner');
         userBodyPanel2.children('div.column1').children('dl.details').children('dt').each((i, e) => {
-            let dd = this.$(e).next();
+            const dd = this.$(e).next();
             switch (this.$(e).text()) {
                 case 'ICQ:':
                     this.icq = dd.children('a').attr('href')
@@ -282,7 +286,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
             }
         });
         userBodyPanel2.children('div.column2').children('dl.details').children('dt').each((i, e) => {
-            let dd = this.$(e).next();
+            const dd = this.$(e).next();
             switch (this.$(e).text()) {
                 case 'Registrován:':
                     this.registered = this.parseDate(dd.text()); break;
@@ -307,14 +311,14 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         this.phpbbid = this.groupIdFromUrl(this.url);
         this.title = this.$('h2').text();
         this.$('tbody').children('tr').each((i, e) => {
-            let td = this.$(e).children('td').first();
+            const td = this.$(e).children('td').first();
             this.users.push(td.children('a').attr('href'));
         });
     }
 
     private scrapPagination(): void {
         fnDebug('this.scrapPagination()');
-        let pagination = this.$('.pagination').children('a').children('strong');
+        const pagination = this.$('.pagination').children('a').children('strong');
         this.page = +pagination.first().text();
         if (this.page > 0) {
             this.firstPageUrl = this.url;
@@ -335,24 +339,24 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         this.phpbbid = this.threadIdFromUrl(this.url);
         this.title = this.$('div#page-body').children("h2").text();
         this.$('.post').each((i, p) => {
-            let postBody = this.$(p).children('div.inner').children('div.postbody');
-            let titleLink = postBody.children('h3').children('a');
-            let authorBody = postBody.children('p.author');
+            const postBody = this.$(p).children('div.inner').children('div.postbody');
+            const titleLink = postBody.children('h3').children('a');
+            const authorBody = postBody.children('p.author');
             if (authorBody.length > 0) {
-                let authorLink = authorBody.children('strong').children('a');
-                let likesBody = postBody.children('div.content').last().children('dl.postbody').children('dd').children('a');
-                let likes = [];
+                const authorLink = authorBody.children('strong').children('a');
+                const likesBody = postBody.children('div.content').last().children('dl.postbody').children('dd').children('a');
+                const likes = [];
                 likesBody.each((j, a) => {
                     likes.push(this.$(a).attr('href'));
                 });
-                let created = this.convertCreatedDate(authorBody);
+                const created = this.convertCreatedDate(authorBody);
                 let authorUrl = authorLink.attr('href');
                 let authorName = authorLink.text();
                 if (!authorUrl) {
                     authorName = authorBody.children('strong').children('span').text();
                     authorUrl = 'http://unregistered.user/'+this.normalizeString(authorName);
                 }
-                let post = {
+                const post = {
                     phpbbid: this.postId(this.$(p).attr('id')),
                     url: titleLink.attr('href'),
                     title: titleLink.text(),
@@ -376,7 +380,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
     private makeGroupUrl(id, name): string {
         if (id == 2) { name = 'registered'; }
-        let url = URL.parse(this.url);
+        const url = URL.parse(this.url);
         return url.protocol+'//'+
                 url.host+'/'+this.normalizeString(name)+
                 '-g'+id+'.html';
@@ -384,7 +388,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
     private forumIdFromUrl(url): number {
         const re = /\-f(\d+)\/(page\d+\.html)?$/;
-        let matches = re.exec(url);
+        const matches = re.exec(url);
         if (matches && matches[1]) {
             return +matches[1];
         }
@@ -393,7 +397,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
     private threadIdFromUrl(url): number {
         const re = /\-t(\d+)(\-\d+)?\.html$/;
-        let matches = re.exec(url);
+        const matches = re.exec(url);
         if (matches && matches[1]) {
             return +matches[1];
         }
@@ -402,7 +406,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
     private userIdFromUrl(url): number {
         const re = /\-u(\d+)\/$/;
-        let matches = re.exec(url);
+        const matches = re.exec(url);
         if (matches && matches[1]) {
             return +matches[1];
         }
@@ -411,7 +415,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
     private groupIdFromUrl(url): number {
         const re = /\-g(\d+)(\-\d+)?\.html$/;
-        let matches = re.exec(url);
+        const matches = re.exec(url);
         if (matches && matches[1]) {
             return +matches[1];
         }
@@ -447,7 +451,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private parseDate(date): string {
-        let c = date.split(/ /);
+        const c = date.split(/ /);
         if (c.length > 1) {
             return c[2].replace(',','')+'-'+this.month(c[1])+'-'+c[0]+' '+c[3];
         }
@@ -455,7 +459,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private convertCreatedDate(authorBody): string {
-        let createdBody = authorBody.clone();
+        const createdBody = authorBody.clone();
         createdBody.children().each((i, e) => { this.$(e).remove(); });
         return this.parseDate(createdBody.text().replace(/od  » /, ''));
     }
