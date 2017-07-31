@@ -238,18 +238,6 @@ export class RdfExport {
             }
         }
 
-/*
-        signature: data.signature,
-        rank: data.rank,
-        occupation: data.occupation,
-        defaultGroup: data.defaultGroup,
-        interests: data.interests,
-        profession: data.profession,
-        totalPosts: data.totalPosts,
-        likesGot: data.likesGot,
-        likesGave: data.likesGave,
-        showOnMap: data.showOnMap
-*/
         this.users[data.url] = user;
     }
 
