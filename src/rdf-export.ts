@@ -80,10 +80,13 @@ export class RdfExport {
         }
         if (data.age > 0) { user.add(foafSym, FOAF('age'), $rdf.lit(data.age, '', XSD('integer'))); }
         if (data.www) {
-            if (isUri(data.www)) {
-                user.add(foafSym, FOAF('homepage'), $rdf.sym(data.www));
-            } else {
-                console.log('Invalid homepage "'+data.www+'" for user: "'+data.uri+'".');
+            const homepages = data.www.replace(/,/, ' ').replace(/\s+/, ' ').split(/ /);
+            for (const homepage of homepages) {
+                if (isUri(homepage)) {
+                    user.add(foafSym, FOAF('homepage'), $rdf.sym(homepage));
+                } else {
+                    console.log('Invalid homepage "'+homepage+'" for user: "'+data.url+'".');
+                }
             }
         }
         if (data.jabber) { user.add(foafSym, FOAF('jabberID'), $rdf.lit(data.jabber)); }
