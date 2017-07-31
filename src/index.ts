@@ -16,6 +16,7 @@ let username = null;
 let password = null;
 let outDir = './out/';
 let dataFile = outDir+'queue.json';
+let requestCache = false;
 
 let queue = [];
 let finished = [];
@@ -38,7 +39,7 @@ ForumPiratiCzPageScrapper
 function scrapTick(): void {
     if (queue.length > 0) {
         let url = queue.shift();
-        (new ForumPiratiCzPageScrapper(url)).scrap().then((data) => {
+        (new ForumPiratiCzPageScrapper(url, requestCache)).scrap().then((data) => {
             if (data.links) {
                 for (let link of data.links) {
                     switch (link.type) { // crawl forum links
@@ -88,9 +89,10 @@ function loadConfig(): void {
     if (fs.existsSync(configFile)) {
         let data = JSON.parse(fs.readFileSync(configFile).toString());
         if (data) {
-            if (data.forumUrl) forumUrl = data.forumUrl;
-            if (data.username) username = data.username;
-            if (data.password) password = data.password;
+            if (data.forumUrl)      forumUrl        = data.forumUrl;
+            if (data.username)      username        = data.username;
+            if (data.password)      password        = data.password;
+            if (data.requestCache)  requestCache    = data.requestCache;
             if (data.outDir) {
                 outDir = data.outDir;
                 dataFile = outDir+'queue.json';

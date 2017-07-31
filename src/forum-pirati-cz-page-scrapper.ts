@@ -4,20 +4,14 @@ import { fnDebug, getDebug } from './debug';
 let debug = getDebug('forum-pirati-cz-page-scrapper');
 
 import { remove as removeDiacritics } from 'diacritics';
-import * as requestExt from 'request-extensible';
-import * as RequestHttpCache from 'request-http-cache';
 import * as cheerio from 'cheerio';
 import * as origRequest from 'request';
 import * as URL from 'url';
 
-export let httpRequestCache = new RequestHttpCache({
-    backend: 'redis',
-    redis: {
-        host: '127.0.0.1',
-        port: '6379'
-    },
-    ttl: 86400
-});
+import * as requestExt from 'request-extensible';
+import * as RequestHttpCache from 'request-http-cache';
+
+let defaultRequest = origRequest.defaults({ jar : true });
 
 const rootUrl = new RegExp(/^https?:\/\/[^\/]+\/$/);
 const forumUrl = new RegExp(/^http.*\-f(\d+)\/$/);
@@ -28,25 +22,6 @@ const postUrl = new RegExp(/^http.*\.html#p(\d+)\/$/);
 const userUrl = new RegExp(/^http.*\-u(\d+)\/$/);
 const groupUrl = new RegExp(/^http.*\-g(\d+).html$/);
 const groupPageUrl = new RegExp(/^http.*\-g(\d+)\-(\d+).html$/);
-
-let defaultRequest = origRequest.defaults({ jar : true })
-
-function requestWithFakeResponseHeaders(options, callback) {
-    defaultRequest(options, (error, response, body) => {
-        if (!error && response && response.headers) {
-            response.headers.etag = (new Date(new Date().toJSON().slice(0,10)+' 00:00:00')).getTime();
-            response.headers['pragma'] = '';
-            response.headers['cache-control'] = "max-age=86400";
-            response.headers['expires'] = Date.now() + 86400;
-        }
-        callback(error, response, body);
-    });
-}
-
-export let request = requestExt({
-    request: requestWithFakeResponseHeaders,
-    extensions: [ httpRequestCache.extension ]
-});
 
 export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
 
@@ -86,17 +61,25 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     private resolve = null;
     private reject = null;
     private $ = null;
+    private static httpRequestCache = null;
+    private defaultRequest = null;
+    private request = null;
 
-    constructor(public readonly url: string) {};
+    constructor(public readonly url: string, private requestCache: boolean = false) {};
 
     scrap(): Promise<ForumPiratiCzPageScrapper> {
-        fnDebug('scrap()');
+        fnDebug('this.scrap()');
         this.type = ForumPiratiCzPageScrapper.linkType(this.url);
         return new Promise((resolve, reject) => {
             if (this.resolve || this.reject) { reject('scrap not finished yet'); }
             this.resolve = resolve;
             this.reject = reject;
-            request({ url: this.url }, (err, response, body): void => {
+            let scrappingRequest = defaultRequest;
+            if (this.requestCache) {
+                if (!this.request) this.initCache();
+                scrappingRequest = this.request;
+            }
+            scrappingRequest({ url: this.url }, (err, response, body): void => {
                 if (err) this.reject(err);
                 if (!body) this.reject('no content');
                 this.$ = cheerio.load(body);
@@ -123,6 +106,39 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         });
     }
 
+    initCache(httpRequestCache?: RequestHttpCache): void {
+        fnDebug('this.initCache('+(httpRequestCache)?'injected httpRequestCache':''+')');
+        if (!httpRequestCache) {
+            httpRequestCache = new RequestHttpCache({
+                backend: 'redis',
+                redis: {
+                    host: '127.0.0.1',
+                    port: '6379'
+                },
+                ttl: 86400
+            });
+        }
+        ForumPiratiCzPageScrapper.httpRequestCache = httpRequestCache;
+
+        let requestWithFakeResponseHeaders = (options, callback) => {
+            defaultRequest(options, (error, response, body) => {
+                if (!error && response && response.headers) {
+                    response.headers.etag = (new Date(new Date().toJSON().slice(0,10)+' 00:00:00')).getTime();
+                    response.headers['pragma'] = '';
+                    response.headers['cache-control'] = "max-age=86400";
+                    response.headers['expires'] = Date.now() + 86400;
+                }
+                callback(error, response, body);
+            });
+        }
+
+        this.request = requestExt({
+            request: requestWithFakeResponseHeaders,
+            extensions: [ ForumPiratiCzPageScrapper.httpRequestCache.extension ]
+        });
+    }
+
+
     static login(loginUrl: string, username: string, password: string): Promise<any> {
         fnDebug('ForumPiratiCzPageScrapper.login('+loginUrl+', '+username+', ***invisible***)');
         return new Promise((resolve, reject) => {
@@ -147,9 +163,11 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
         });
     }
 
-    static quit(): PhpbbPageScrapper {
-        fnDebug('ForumPiratiCzPhpbbPageScrapper.quit()');
-        return httpRequestCache.backend.redisClient.quit()
+    static quit(): void {
+        fnDebug('ForumPiratiCzPageScrapper.quit()');
+        if (ForumPiratiCzPageScrapper.httpRequestCache) {
+            ForumPiratiCzPageScrapper.httpRequestCache.backend.redisClient.quit()
+        }
     }
 
     static linkType(url): PageType {
@@ -167,7 +185,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapLinks(): void {
-        fnDebug('scrapLinks()');
+        fnDebug('this.scrapLinks()');
         this.$('a').each((i, a) => {
             const linkUrl = this.$(a).attr('href');
             const type = ForumPiratiCzPageScrapper.linkType(this.$(a).attr('href'));
@@ -182,7 +200,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapParent(): void {
-        fnDebug('scrapParent()');
+        fnDebug('this.scrapParent()');
         let linkPath = this.$('div#page-header').children('div.navbar').children('div.inner').children('ul.navlinks')
                         .children('li.icon-home').children('a');
         this.forumUrl = linkPath.last().attr('href');
@@ -192,7 +210,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapForum(): void {
-        fnDebug('scrapForum()');
+        fnDebug('this.scrapForum()');
         this.phpbbid = this.forumIdFromUrl(this.url);
         let title = this.$('div#page-body').children("h2").text();
         if (title) {
@@ -201,7 +219,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapUser(): void {
-        fnDebug('scrapUser()');
+        fnDebug('this.scrapUser()');
         this.phpbbid = this.userIdFromUrl(this.url);
         this.title = this.$('dl.details').first().children('dd').children('span').text();
         this.signature = this.$('.signature').html();
@@ -285,7 +303,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapGroup(): void {
-        fnDebug('scrapGroup()');
+        fnDebug('this.scrapGroup()');
         this.phpbbid = this.groupIdFromUrl(this.url);
         this.title = this.$('h2').text();
         this.$('tbody').children('tr').each((i, e) => {
@@ -295,7 +313,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapPagination(): void {
-        fnDebug('scrapPagination()');
+        fnDebug('this.scrapPagination()');
         let pagination = this.$('.pagination').children('a').children('strong');
         this.page = +pagination.first().text();
         if (this.page > 0) {
@@ -313,7 +331,7 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
     }
 
     private scrapThread(): void {
-        fnDebug('scrapThread()');
+        fnDebug('this.scrapThread()');
         this.phpbbid = this.threadIdFromUrl(this.url);
         this.title = this.$('div#page-body').children("h2").text();
         this.$('.post').each((i, p) => {
