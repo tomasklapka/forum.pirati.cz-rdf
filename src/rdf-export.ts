@@ -290,9 +290,14 @@ export class RdfExport {
 
         if (data.parentForumUrl) {
             if (data.parentForumUrl == this.baseUrl) {
-                this.root.add(forumSym, SIOC('host_of'), $rdf.sym(url));
+                this.root.add(this.rootSym, SIOC('host_of'), $rdf.sym(url));
             } else {
-                forum.add(forumSym, SIOC('has_parent'), $rdf.sym(data.parentForumUrl));
+                let parentForum = this.forums[data.parentForumUrl];
+                if (!parentForum) parentForum = $rdf.graph();
+                let parentForumSym = $rdf.sym(data.parentForumUrl);
+                parentForum.add(parentForumSym, SIOC('parent_of'), forumSym);
+                this.forums[data.parentForumUrl] = parentForum;
+                forum.add(forumSym, SIOC('has_parent'), parentForumSym);
             }
         }
 
@@ -320,9 +325,15 @@ export class RdfExport {
 
         if (data.parentForumUrl) {
             if (data.parentForumUrl == this.baseUrl) {
-                this.root.add(threadSym, SIOC('host_of'), $rdf.sym(url));
+                this.root.add(this.rootSym, SIOC('host_of'), threadSym);
+                this.root.add(this.rootSym, SIOC('parent_of'), threadSym);
             } else {
-                thread.add(threadSym, SIOC('has_parent'), $rdf.sym(data.parentForumUrl));
+                let parentForum = this.forums[data.parentForumUrl];
+                if (!parentForum) parentForum = $rdf.graph();
+                let parentForumSym = $rdf.sym(data.parentForumUrl);
+                parentForum.add(parentForumSym, SIOC('parent_of'), threadSym);
+                this.forums[data.parentForumUrl] = parentForum;
+                thread.add(threadSym, SIOC('has_parent'), parentForumSym);
             }
         }
 
