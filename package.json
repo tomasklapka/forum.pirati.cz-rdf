@@ -22,6 +22,7 @@
     "mkdirp": "^0.5.1",
     "rdflib": "^0.15.0",
     "request-extensible": "^0.1.1",
-    "request-http-cache": "^1.0.1"
+    "request-http-cache": "^1.0.1",
+    "valid-url": "^1.0.9"
   }
 }

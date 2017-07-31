@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as mkdirp from 'mkdirp';
 import * as URL from 'url';
 import { join, basename } from 'path';
+import { isUri } from 'valid-url';
 
 import { PhpbbPageType as PageType } from './phpbb-page-scrapper';
 
@@ -213,7 +214,13 @@ export class RdfExport {
             user.add(userSym, SIOC('avatar'), avatarSym);
         }
         if (data.age > 0) { user.add(foafSym, FOAF('age'), $rdf.lit(data.age, '', XSD('integer'))); }
-        if (data.www) { user.add(foafSym, FOAF('homepage'), $rdf.sym(data.www)); }
+        if (data.www) {
+            if (isUri(data.www)) {
+                user.add(foafSym, FOAF('homepage'), $rdf.sym(data.www));
+            } else {
+                console.log('Invalid homepage "'+data.www+'" for user: "'+data.uri+'".');
+            }
+        }
         if (data.jabber) { user.add(foafSym, FOAF('jabberID'), $rdf.lit(data.jabber)); }
         if (data.icq) { user.add(foafSym, FOAF('icqChatID'), $rdf.lit(data.icq)); }
 
