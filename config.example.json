@@ -3,5 +3,8 @@
     "username": "user name",
     "password": "pass word",
     "outDir": "./out/",
-    "requestCache": false
+    "scrapInterval": 1000,      // 1000 ms = 1 second (do not use less than 500 ms to avoid dos/flood protection)
+    "cacheMaxFiles": 1000,      // 1000 files
+    "cacheTtl": 300,            //  300 s  = 5 minutes
+    "requestCache": false       // useful for debugging of parsing to avoid repeated HTTP requests to the same resource
 }

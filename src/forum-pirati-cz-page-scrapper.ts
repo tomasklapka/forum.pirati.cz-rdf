@@ -80,12 +80,19 @@ export class ForumPiratiCzPageScrapper implements PhpbbPageScrapper {
                 scrappingRequest = this.request;
             }
             scrappingRequest({ url: this.url }, (err, response, body): void => {
-                if (err) this.reject(err);
-                if (!body) this.reject('no content');
+                if (err) {
+                    this.reject(err);
+                    return;
+                }
+                if (!body) {
+                    this.reject('no content');
+                    return;
+                }
                 try {
                     this.$ = cheerio.load(body);
                 } catch (err) {
-                    console.log('Cheerio parsing body: #####\n%s\n#####', body);
+                    console.log(response);
+                    console.log('Cheerio parsing body: %s\n#####\n%s\n#####', this.url, body);
                     console.log('Cheerio parsing error: %s', err);
                     this.reject(err);
                 }

@@ -34,6 +34,10 @@ export class RdfExport {
         this.graphStore.base.put(this.baseUrl, base);
     }
 
+    quit(): void {
+        this.graphStore.quit();
+    }
+
     add(data): RdfExport {
         fnDebug('RdfExport.add(%s)', data);
         switch (data.type) {
