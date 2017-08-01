@@ -79,9 +79,9 @@ class CachedFile {
     }
 
     static touchSorter(f1: CachedFile, f2: CachedFile): number {
-        if (f1.touched > f2.touched) return 1;
-        if (f1.touched < f2.touched) return -1;
-        return 0;
+        if (f1.touched < f2.touched) return 1;
+        if (f1.touched > f2.touched) return -1;
+        return CachedFile.cachedSorter(f1, f2);
     }
 }
 
@@ -90,7 +90,9 @@ export class FileSystemCache {
     private files = {};
     private n = 0;
 
-    constructor(private maxFiles, private maxTtl) {}
+    constructor(private maxFiles, private maxTtl) {
+        setInterval(()=>{ debug('fsCache files: %s', this.n); }, 5000);
+    }
 
     load(filename): string {
         if (!this.files[filename]) {
@@ -121,15 +123,15 @@ export class FileSystemCache {
             }
         }
         if (this.n > this.maxFiles) {
-            debug('cacheMaxFiles (%n) reached (%n).', this.maxFiles, this.n);
+            debug('cacheMaxFiles (%s) reached (current: %s).', this.maxFiles, this.n);
             const overflowFiles = [];
             Object.values(this.files)
-                .sort(CachedFile.cachedSorter)
-                .splice(0, this.maxFiles-this.n)
+                .sort(CachedFile.touchSorter)
+                .splice(0, this.n - this.maxFiles)
                 .map((file: CachedFile) => {
                     overflowFiles.push(file.filename);
                 });
-            debug(overflowFiles);
+            debug('overflowFiles: ', overflowFiles);
             for (const filename of overflowFiles) {
                 this.flushFile(filename);
             }
@@ -146,6 +148,7 @@ export class FileSystemCache {
     flush(): void {
         fnDebug('FileSystemCache.flush()');
         if (this.n > 0) {
+            debug ('flushing %n files', this.n);
             for (const filename in this.files) {
                 this.flushFile(filename);
             }
